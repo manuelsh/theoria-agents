@@ -1,0 +1,18 @@
+# Which model to use per agent (references .env variables)
+# "fast" = BEDROCK_MODEL_FAST, "best" = BEDROCK_MODEL_BEST
+agent_models:
+  researcher: "fast"
+  derivation: "best"
+  verifier: "best"
+  assembler: "fast"
+  reviewer: "best"
+
+# Web search for research phase
+web_search:
+  enabled: true
+  sources:
+    - wikipedia
+
+# Reviewer self-correction settings
+reviewer:
+  max_correction_loops: 3

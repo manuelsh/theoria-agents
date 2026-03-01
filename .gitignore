@@ -1,0 +1,26 @@
+# Submodules/external repos
+theoria-dataset/
+
+# Claude Code
+.claude/
+
+# Environment
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
