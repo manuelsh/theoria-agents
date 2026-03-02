@@ -14,6 +14,7 @@ from src.agents import (
 from src.dataset import DatasetLoader
 from src.llm.config import load_config
 from src.models import TheoriaEntry
+from src.validation import EntryValidator
 
 
 class PipelineOrchestrator:
@@ -32,6 +33,7 @@ class PipelineOrchestrator:
         """
         self.config = config or load_config()
         self.dataset = dataset_loader or DatasetLoader()
+        self.validator = EntryValidator(self.dataset.dataset_path)
 
         # Initialize agents with shared dataset loader
         self.researcher = ResearcherAgent(
@@ -177,6 +179,14 @@ class PipelineOrchestrator:
 
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"{entry.result_id}.json"
+
+        # Validate against theoria-dataset's JSON schema before saving
+        entry_dict = entry.model_dump(exclude_none=True)
+        validation_errors = self.validator.validate(entry_dict)
+        if validation_errors:
+            print(f"      Warning: Entry has {len(validation_errors)} schema validation issues:")
+            for err in validation_errors[:5]:  # Show first 5
+                print(f"        - {err}")
 
         with open(output_path, "w") as f:
             f.write(entry.model_dump_json(indent=2, exclude_none=True))

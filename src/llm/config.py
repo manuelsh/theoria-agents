@@ -67,9 +67,15 @@ def get_model(agent_name: str, config: dict[str, Any] | None = None) -> str:
         )
 
     # Format for LiteLLM if it's a Bedrock ARN or model ID
-    if model.startswith("arn:aws:bedrock") or "anthropic" in model.lower():
-        if not model.startswith("bedrock/"):
+    if model.startswith("arn:aws:bedrock"):
+        # Inference profile ARNs need the converse route
+        if "application-inference-profile" in model:
+            if not model.startswith("bedrock/converse/"):
+                model = f"bedrock/converse/{model}"
+        elif not model.startswith("bedrock/"):
             model = f"bedrock/{model}"
+    elif "anthropic" in model.lower() and not model.startswith("bedrock/"):
+        model = f"bedrock/{model}"
 
     return model
 

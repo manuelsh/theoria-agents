@@ -5,6 +5,9 @@ from typing import Any
 
 import litellm
 
+# Bedrock inference profiles don't support all parameters (e.g., temperature)
+litellm.drop_params = True
+
 
 class LLMClient:
     """Async LLM client with retry logic and provider abstraction."""
@@ -52,6 +55,7 @@ class LLMClient:
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    drop_params=True,  # Bedrock inference profiles don't support all params
                     **kwargs,
                 )
                 return response.choices[0].message.content or ""

@@ -1,62 +1,64 @@
-"""Pydantic models for theoria-dataset entries and agent outputs."""
+"""Pydantic models for agent inputs and outputs.
+
+These models are used for structured LLM responses and internal data flow.
+Final entry validation happens against theoria-dataset's JSON schema via src/validation.py.
+"""
+
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-# === Entry Schema Models ===
+# === Shared Data Structures ===
+# These are used by multiple agents and match theoria-dataset structure.
+# They are intentionally minimal - full validation happens via JSON schema.
 
 
 class Equation(BaseModel):
     """A single equation in the result_equations array."""
 
-    id: str = Field(..., description="Unique short tag for the equation (e.g., 'eq1')")
-    equation: str = Field(..., description="AsciiMath representation of the equation")
-    equation_title: str | None = Field(
-        None, description="Optional human-readable title (e.g., 'Newton's Second Law')"
-    )
+    id: str
+    equation: str
+    equation_title: str | None = None
 
 
 class Definition(BaseModel):
     """A symbol definition."""
 
-    symbol: str = Field(..., description="Symbol in AsciiMath format")
-    definition: str = Field(..., description="Definition of the symbol")
+    symbol: str
+    definition: str
 
 
 class DerivationStep(BaseModel):
     """A single step in the derivation."""
 
-    step: int = Field(..., ge=1, description="Step number (sequential)")
-    description: str = Field(..., description="Textual rationale for this step")
-    equation: str = Field(..., description="AsciiMath equation for this step")
-    equation_proven: str | None = Field(
-        None, description="ID of equation from result_equations that this step proves"
-    )
-    assumptions: list[str] | None = Field(
-        None, description="Assumption IDs invoked in this step"
-    )
+    step: int
+    description: str
+    equation: str
+    equation_proven: str | None = None
+    assumptions: list[str] | None = None
 
 
 class ProgrammaticVerification(BaseModel):
     """Python/SymPy verification code."""
 
-    language: str = Field("Python 3.11.12", pattern=r"^[A-Za-z]+\s\d+\.\d+\.\d+$")
-    library: str = Field("sympy 1.13.1", pattern=r"^(none|[A-Za-z0-9_]+\s\d+\.\d+\.\d+)$")
-    code: list[str] = Field(..., min_length=1, description="Lines of verification code")
+    language: str = "Python 3.11.12"
+    library: str = "sympy 1.13.1"
+    code: list[str]
 
 
 class Reference(BaseModel):
     """Academic citation."""
 
-    id: str = Field(..., description="Reference ID (e.g., 'R1')")
-    citation: str = Field(..., description="APA format citation")
+    id: str
+    citation: str
 
 
 class Contributor(BaseModel):
     """Entry contributor."""
 
     full_name: str
-    identifier: str = Field(..., description="ORCID, website, or other identifier")
+    identifier: str
 
 
 class HistoricalContext(BaseModel):
@@ -67,59 +69,28 @@ class HistoricalContext(BaseModel):
     key_insights: list[str] | None = None
 
 
-class TheoriaEntry(BaseModel):
-    """Complete theoria-dataset entry."""
-
-    result_id: str = Field(..., pattern=r"^[a-z0-9_]+$")
-    result_name: str = Field(..., max_length=100)
-    result_equations: list[Equation] = Field(..., min_length=1)
-    explanation: str = Field(..., max_length=800)
-    definitions: list[Definition] = Field(..., min_length=1)
-    assumptions: list[str] = Field(default_factory=list)
-    depends_on: list[str] = Field(default_factory=list)
-    derivation: list[DerivationStep] = Field(..., min_length=1)
-    programmatic_verification: ProgrammaticVerification
-    domain: str = Field(..., pattern=r"^[a-z][a-z\-\.]+$")
-    theory_status: str = Field(
-        ..., pattern=r"^(current|historical|approximation|limiting_case|generalized)$"
-    )
-    generalized_by: list[str] | None = None
-    historical_context: HistoricalContext | None = None
-    references: list[Reference] = Field(..., min_length=1, max_length=3)
-    contributors: list[Contributor] = Field(..., min_length=1)
-    review_status: str = Field("draft", pattern=r"^(draft|reviewed)$")
-
-
 # === Agent Output Models ===
 
 
 class ProposedAssumption(BaseModel):
     """A new assumption proposed by the Researcher agent."""
 
-    id: str = Field(..., pattern=r"^[a-z0-9_]+$", description="Unique ID for the assumption")
-    title: str = Field(..., max_length=100, description="Short title")
-    text: str = Field(..., max_length=1000, description="Description of the assumption")
-    type: str = Field(..., pattern=r"^(principle|empirical|approximation)$")
-    mathematical_expressions: list[str] | None = Field(
-        None, description="Optional mathematical expressions in AsciiMath"
-    )
-    symbol_definitions: list[Definition] | None = Field(
-        None, description="Required if mathematical_expressions is provided"
-    )
+    id: str = Field(..., description="Unique ID for the assumption")
+    title: str = Field(..., description="Short title")
+    text: str = Field(..., description="Description of the assumption")
+    type: str = Field(..., description="One of: principle, empirical, approximation")
+    mathematical_expressions: list[str] | None = None
+    symbol_definitions: list[Definition] | None = None
 
 
 class ResearchOutput(BaseModel):
     """Output from the Researcher agent."""
 
-    result_id: str = Field(..., description="Proposed entry ID")
-    result_name: str = Field(..., description="Proposed entry name")
+    result_id: str
+    result_name: str
     depends_on: list[str] = Field(default_factory=list)
-    assumptions: list[str] = Field(
-        default_factory=list, description="IDs of existing assumptions to use"
-    )
-    new_assumptions: list[ProposedAssumption] = Field(
-        default_factory=list, description="New assumptions that need to be created"
-    )
+    assumptions: list[str] = Field(default_factory=list)
+    new_assumptions: list[ProposedAssumption] = Field(default_factory=list)
     references: list[Reference] = Field(default_factory=list)
     domain: str
     theory_status: str
@@ -140,15 +111,46 @@ class VerifierOutput(BaseModel):
     """Output from the Verifier agent."""
 
     programmatic_verification: ProgrammaticVerification
-    execution_success: bool = Field(..., description="Whether the code executed without errors")
-    execution_output: str | None = Field(None, description="Output or error from execution")
+    execution_success: bool
+    execution_output: str | None = None
 
 
 class ReviewResult(BaseModel):
     """Output from the Reviewer agent."""
 
-    passed: bool = Field(..., description="Whether the entry passed all quality checks")
-    issues: list[str] = Field(default_factory=list, description="List of issues found")
-    corrected_entry: TheoriaEntry | None = Field(
-        None, description="Corrected entry if issues were found and fixed"
-    )
+    passed: bool
+    issues: list[str] = Field(default_factory=list)
+    corrected_entry: Any | None = None  # TheoriaEntry, avoiding circular import
+
+
+# === Entry Assembly ===
+
+
+class TheoriaEntry(BaseModel):
+    """Complete theoria-dataset entry for internal assembly.
+
+    This model is used to construct entries from agent outputs.
+    Final validation should use EntryValidator from src/validation.py
+    which validates against the canonical JSON schema.
+    """
+
+    result_id: str
+    result_name: str
+    result_equations: list[Equation]
+    explanation: str
+    definitions: list[Definition]
+    assumptions: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    derivation: list[DerivationStep]
+    programmatic_verification: ProgrammaticVerification
+    domain: str
+    theory_status: str
+    generalized_by: list[str] | None = None
+    historical_context: HistoricalContext | None = None
+    references: list[Reference]
+    contributors: list[Contributor]
+    review_status: str = "draft"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict for JSON schema validation."""
+        return self.model_dump(exclude_none=True)

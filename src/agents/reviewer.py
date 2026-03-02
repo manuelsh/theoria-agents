@@ -126,7 +126,7 @@ Fix issues according to the guidelines. Keep correct content unchanged."""
 
 ## Entry
 ```json
-{entry.model_dump_json(indent=2)}
+{entry.model_dump_json(indent=2, exclude_none=True)}
 ```
 
 ## Issues to Fix
