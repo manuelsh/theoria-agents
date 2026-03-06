@@ -18,6 +18,7 @@ def load_config() -> dict[str, Any]:
 
     config: dict[str, Any] = {
         "theoria_dataset_path": os.getenv("THEORIA_DATASET_PATH"),
+        "theoria_output_path": os.getenv("THEORIA_OUTPUT_PATH"),
         "aws_region": os.getenv("AWS_REGION", "us-east-1"),
         "models": {
             "fast": os.getenv("BEDROCK_MODEL_FAST"),
@@ -105,5 +106,32 @@ def get_dataset_path(config: dict[str, Any] | None = None) -> Path:
     path = Path(dataset_path)
     if not path.exists():
         raise ValueError(f"Dataset path does not exist: {path}")
+
+    return path
+
+
+def get_output_path(config: dict[str, Any] | None = None) -> Path:
+    """Get the path to the output directory.
+
+    Args:
+        config: Configuration dict. Loads from env if not provided.
+
+    Returns:
+        Path to output directory (will be created if doesn't exist).
+
+    Raises:
+        ValueError: If THEORIA_OUTPUT_PATH is not set.
+    """
+    if config is None:
+        config = load_config()
+
+    output_path = config.get("theoria_output_path")
+
+    if not output_path:
+        raise ValueError(
+            "THEORIA_OUTPUT_PATH not set. Add it to your .env file."
+        )
+
+    path = Path(output_path).resolve()
 
     return path

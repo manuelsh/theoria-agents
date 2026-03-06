@@ -69,7 +69,60 @@ class HistoricalContext(BaseModel):
     key_insights: list[str] | None = None
 
 
-# === Agent Output Models ===
+# === New Agent Output Models (Restructured Pipeline) ===
+
+
+class InformationGatheringOutput(BaseModel):
+    """Output from the InformationGatherer agent."""
+
+    web_context: str = Field(..., description="Curated summary of physics concept from web sources")
+    historical_context: HistoricalContext | None = None
+    suggested_references: list[Reference] = Field(default_factory=list)
+
+
+class MetadataOutput(BaseModel):
+    """Output from the MetadataFiller agent."""
+
+    result_id: str
+    result_name: str
+    explanation: str
+    domain: str
+    theory_status: str
+    references: list[Reference]
+    contributor_name: str
+    contributor_id: str
+    review_status: str = "draft"
+    historical_context: HistoricalContext | None = None
+
+
+class MissingDependency(BaseModel):
+    """A dependency that doesn't exist yet in the dataset."""
+
+    id: str = Field(..., description="Suggested ID for the missing entry")
+    reason: str = Field(..., description="Why this dependency is needed")
+
+
+class AssumptionsDependenciesOutput(BaseModel):
+    """Output from the AssumptionsDependencies agent."""
+
+    assumptions: list[str] = Field(default_factory=list, description="IDs of existing assumptions")
+    new_assumptions: list["ProposedAssumption"] = Field(
+        default_factory=list, description="New assumptions to be added"
+    )
+    depends_on: list[str] = Field(default_factory=list, description="IDs of existing entries")
+    missing_dependencies: list[dict] = Field(
+        default_factory=list, description="Dependencies that need to be created"
+    )
+
+
+class EquationsSymbolsOutput(BaseModel):
+    """Output from the EquationsSymbols agent."""
+
+    result_equations: list[Equation] = Field(..., min_length=1)
+    definitions: list[Definition] = Field(..., min_length=1)
+
+
+# === Agent Output Models (Legacy) ===
 
 
 class ProposedAssumption(BaseModel):

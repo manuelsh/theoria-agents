@@ -1,11 +1,18 @@
 # Which model to use per agent (references .env variables)
 # "fast" = BEDROCK_MODEL_FAST, "best" = BEDROCK_MODEL_BEST
 agent_models:
-  researcher: "fast"
+  # Phase 1: Research & Foundation (4 agents)
+  information_gatherer: "fast"
+  metadata_filler: "fast"
+  assumptions_dependencies: "best"
+  equations_symbols: "best"
+  # Phase 2: Derivation & Verification (4 agents)
   derivation: "best"
   verifier: "best"
   assembler: "fast"
   reviewer: "best"
+  # Legacy (to be removed)
+  researcher: "fast"
 
 # Web search for research phase
 web_search:

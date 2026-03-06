@@ -1,7 +1,7 @@
 """Provider-agnostic LLM client using LiteLLM."""
 
 import asyncio
-from typing import Any
+from typing import Any, Callable
 
 import litellm
 
@@ -17,10 +17,12 @@ class LLMClient:
         default_model: str,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        log_callback: Callable[[dict[str, Any], str, str], None] | None = None,
     ):
         self.default_model = default_model
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.log_callback = log_callback
 
     async def complete(
         self,
@@ -48,6 +50,14 @@ class LLMClient:
         model = model or self.default_model
         last_error: Exception | None = None
 
+        # Build input data for logging
+        input_data = {
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            **kwargs,
+        }
+
         for attempt in range(self.max_retries):
             try:
                 response = await litellm.acompletion(
@@ -58,7 +68,14 @@ class LLMClient:
                     drop_params=True,  # Bedrock inference profiles don't support all params
                     **kwargs,
                 )
-                return response.choices[0].message.content or ""
+                content = response.choices[0].message.content or ""
+
+                # Call log callback if provided
+                if self.log_callback:
+                    output_data = {"content": content}
+                    self.log_callback(input_data, output_data, model)
+
+                return content
             except Exception as e:
                 last_error = e
                 if attempt < self.max_retries - 1:

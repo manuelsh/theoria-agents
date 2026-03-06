@@ -4,13 +4,19 @@ Multi-agent LLM system for generating high-quality theoretical physics dataset e
 
 ## Overview
 
-This project uses a pipeline of specialized LLM agents to generate rigorous physics derivations:
+This project uses a pipeline of specialized LLM agents to generate rigorous physics derivations. The system follows a **single-responsibility principle** where each agent has one focused task:
 
-1. **Researcher** - Searches Wikipedia, identifies dependencies, selects/proposes assumptions
-2. **Derivation** - Generates step-by-step mathematical derivations
-3. **Verifier** - Creates SymPy code to verify each derivation step
-4. **Assembler** - Combines outputs into a valid dataset entry
-5. **Reviewer** - Quality checks and auto-corrects issues
+### Phase 1: Research & Foundation (4 agents)
+1. **InformationGatherer** - Searches Wikipedia, gathers context and historical information
+2. **MetadataFiller** - Fills entry fields (ID, name, explanation, domain, theory status, etc.)
+3. **AssumptionsDependencies** - Consults dataset to select assumptions and identify dependencies
+4. **EquationsSymbols** - Defines result equations and symbols with correct AsciiMath notation
+
+### Phase 2: Derivation & Verification (4 agents)
+5. **Derivation** - Generates step-by-step mathematical derivations
+6. **Verifier** - Creates and executes SymPy code to verify each step
+7. **Assembler** - Combines all outputs into a valid dataset entry
+8. **Reviewer** - Quality checks with 3-iteration self-correction loop
 
 All agents dynamically load guidelines from theoria-dataset's `CONTRIBUTING.md` and `AI_guidance.md` files - no hardcoded prompts. This ensures agents always follow the latest requirements.
 
@@ -47,6 +53,9 @@ pip install -e ".[dev]"
    ```bash
    # Path to your local theoria-dataset clone (required)
    THEORIA_DATASET_PATH=/path/to/theoria-dataset
+
+   # Path for pipeline output logs and generated entries (required)
+   THEORIA_OUTPUT_PATH=/path/to/output
 
    # AWS Bedrock Configuration
    AWS_REGION=us-east-1
@@ -114,17 +123,98 @@ async def main():
 asyncio.run(main())
 ```
 
+## Output Structure
+
+All pipeline runs generate structured output in `THEORIA_OUTPUT_PATH`:
+
+```
+output/
+├── logs/                                  # Detailed execution logs
+│   └── 2026-03-05_14-30-45_schrodinger_equation_a7b3c9d1/
+│       ├── run_metadata.json            # Pipeline configuration and timing
+│       ├── 01_information_gatherer.json  # LLM inputs/outputs per agent
+│       ├── 02_metadata_filler.json
+│       ├── 03_assumptions_dependencies.json
+│       ├── 04_equations_symbols.json
+│       ├── 05_derivation.json
+│       ├── 06_verifier.json
+│       ├── 07_assembler.json
+│       └── 08_reviewer.json
+└── entries/                               # Generated entries and assumptions
+    └── schrodinger_equation_time_dependent/
+        ├── schrodinger_equation_time_dependent.json         # Final entry
+        └── schrodinger_equation_time_dependent_assump.json  # Assumptions metadata
+```
+
+### Log Files
+
+Each agent log contains:
+- Complete LLM inputs (messages, parameters)
+- Complete LLM outputs (raw and parsed)
+- Execution timing and duration
+- Model identifier used
+- Status and any errors
+- Retry attempts (if applicable)
+
+### Run Metadata
+
+`run_metadata.json` includes:
+- Run ID and timestamps
+- Topic and configuration
+- All agents executed
+- Final status and validation results
+- Errors and issues found
+
+This logging enables:
+- **Debugging**: Inspect exact LLM calls when issues arise
+- **Auditing**: Track what the pipeline did and why
+- **Analysis**: Understand agent behavior and improve prompts
+- **Reproducibility**: Full record of each generation
+
 ## Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌──────────┐     ┌───────────┐     ┌──────────┐
-│  Researcher │ ──> │  Derivation │ ──> │ Verifier │ ──> │ Assembler │ ──> │ Reviewer │
-└─────────────┘     └─────────────┘     └──────────┘     └───────────┘     └──────────┘
-      │                   │                  │                                   │
-      │                   │                  │                                   │
-      v                   v                  v                                   v
-  Web search        Guidelines from      SymPy code          JSON entry      Self-correct
-  Wikipedia        CONTRIBUTING.md        execution           assembly         loop (3x)
+Phase 1: Research & Foundation
+┌──────────────────────┐
+│ InformationGatherer  │ ──> Searches Wikipedia, gathers context
+└──────────────────────┘
+           │
+           v
+┌──────────────────────┐
+│   MetadataFiller     │ ──> Fills entry fields (ID, name, explanation, etc.)
+└──────────────────────┘
+           │
+           v
+┌──────────────────────┐
+│ AssumptionsDeps      │ ──> Consults dataset for assumptions & dependencies
+└──────────────────────┘
+           │
+           v
+┌──────────────────────┐
+│  EquationsSymbols    │ ──> Defines equations & symbols (AsciiMath)
+└──────────────────────┘
+
+Phase 2: Derivation & Verification
+           │
+           v
+┌──────────────────────┐
+│     Derivation       │ ──> Step-by-step mathematical derivation
+└──────────────────────┘
+           │
+           v
+┌──────────────────────┐
+│      Verifier        │ ──> SymPy code generation & execution
+└──────────────────────┘
+           │
+           v
+┌──────────────────────┐
+│      Assembler       │ ──> Combines all outputs into entry
+└──────────────────────┘
+           │
+           v
+┌──────────────────────┐
+│      Reviewer        │ ──> Quality check with 3-iteration self-correction
+└──────────────────────┘
 ```
 
 ### Quality Assurance
@@ -142,8 +232,13 @@ Non-secret settings for agent behavior:
 
 ```yaml
 agent_models:
-  researcher: "fast"    # Uses BEDROCK_MODEL_FAST
-  derivation: "best"    # Uses BEDROCK_MODEL_BEST
+  # Phase 1: Research & Foundation (4 agents)
+  information_gatherer: "fast"
+  metadata_filler: "fast"
+  assumptions_dependencies: "best"
+  equations_symbols: "best"
+  # Phase 2: Derivation & Verification (4 agents)
+  derivation: "best"
   verifier: "best"
   assembler: "fast"
   reviewer: "best"

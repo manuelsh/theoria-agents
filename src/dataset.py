@@ -66,12 +66,12 @@ class DatasetLoader:
 
     @property
     def ai_guidance(self) -> str:
-        """Load and cache AGENTS.md (local AI guidance)."""
+        """Load and cache AI_guidance.md from theoria-dataset."""
         if self._ai_guidance_md is None:
-            # Load from theoria-agents root, not theoria-dataset
-            agents_md_path = Path(__file__).parent.parent / "AGENTS.md"
-            if agents_md_path.exists():
-                self._ai_guidance_md = agents_md_path.read_text()
+            # Load from theoria-dataset (not deprecated guide.md)
+            ai_guidance_path = self.dataset_path / "AI_guidance.md"
+            if ai_guidance_path.exists():
+                self._ai_guidance_md = ai_guidance_path.read_text()
             else:
                 self._ai_guidance_md = ""
         return self._ai_guidance_md

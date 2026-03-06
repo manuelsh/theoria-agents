@@ -2,6 +2,7 @@
 
 import json
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -24,6 +25,7 @@ class BaseAgent(ABC):
         llm_client: LLMClient | None = None,
         config: dict[str, Any] | None = None,
         dataset_loader: DatasetLoader | None = None,
+        agent_logger: Any | None = None,  # AgentLogger type
     ):
         """Initialize the agent.
 
@@ -31,15 +33,41 @@ class BaseAgent(ABC):
             llm_client: LLM client instance. Creates one if not provided.
             config: Configuration dict. Loads from env/yaml if not provided.
             dataset_loader: Dataset loader for accessing guidelines and data.
+            agent_logger: Optional AgentLogger for capturing LLM interactions.
         """
         self.config = config or load_config()
         self.dataset = dataset_loader or DatasetLoader()
+        self.agent_logger = agent_logger
 
         if llm_client is None:
             model = get_model(self.agent_name, self.config)
-            self.llm_client = LLMClient(default_model=model)
+            # Set up log callback if logger is provided
+            log_callback = None
+            if agent_logger:
+                log_callback = self._create_log_callback()
+            self.llm_client = LLMClient(default_model=model, log_callback=log_callback)
         else:
             self.llm_client = llm_client
+
+        # Initialize prompt registry (lazy loading)
+        self._prompt_registry = None
+
+    def _create_log_callback(self) -> Any:
+        """Create a callback function for LLM logging.
+
+        Returns:
+            Callback function that logs LLM calls to the agent logger.
+        """
+
+        def log_callback(
+            input_data: dict[str, Any],
+            output_data: dict[str, Any],
+            model: str,
+        ) -> None:
+            if self.agent_logger:
+                self.agent_logger.log_llm_call(input_data, output_data, model)
+
+        return log_callback
 
     def get_guidelines(self) -> str:
         """Get the combined guidelines from theoria-dataset.
@@ -48,6 +76,30 @@ class BaseAgent(ABC):
             Combined CONTRIBUTING.md and AI_guidance.md content.
         """
         return self.dataset.get_full_guidelines()
+
+    def get_prompt(self) -> str:
+        """Get this agent's prompt from the registry.
+
+        Returns:
+            Complete prompt string
+
+        Raises:
+            FileNotFoundError: If prompt file doesn't exist and no prompt_template fallback
+        """
+        # Try to load from prompt registry
+        try:
+            if self._prompt_registry is None:
+                # Lazy load the registry
+                from prompts.registry import PromptRegistry
+                prompts_dir = Path(__file__).parent.parent.parent / "prompts"
+                self._prompt_registry = PromptRegistry(prompts_dir)
+
+            return self._prompt_registry.get_prompt(self.agent_name)
+        except (FileNotFoundError, ImportError):
+            # Fallback to prompt_template if it exists
+            if hasattr(self, "prompt_template"):
+                return self.prompt_template
+            raise
 
     def build_messages(
         self,
@@ -58,12 +110,12 @@ class BaseAgent(ABC):
 
         Args:
             user_content: The user message content.
-            system_content: Optional system message. Uses prompt_template if not provided.
+            system_content: Optional system message. Uses get_prompt() if not provided.
 
         Returns:
             List of message dicts for the LLM.
         """
-        system = system_content or self.prompt_template
+        system = system_content or self.get_prompt()
         messages = []
 
         if system:
