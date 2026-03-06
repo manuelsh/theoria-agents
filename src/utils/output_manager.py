@@ -144,7 +144,7 @@ class OutputManager:
         log_data: dict[str, Any],
         sequence_number: int,
     ) -> None:
-        """Write agent execution log to file.
+        """Write agent execution log to Markdown file.
 
         Args:
             agent_name: Name of the agent.
@@ -159,13 +159,14 @@ class OutputManager:
                 "No run folder has been created. Call create_run_folder() first."
             )
 
-        # Format: 01_information_gatherer.json
-        filename = f"{sequence_number:02d}_{agent_name}.json"
+        filename = f"{sequence_number:02d}_{agent_name}.md"
         log_file = self.current_run_folder / filename
 
+        markdown_content = self._format_log_as_markdown(log_data)
+
         try:
-            with open(log_file, "w") as f:
-                json.dump(log_data, f, indent=2)
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write(markdown_content)
         except IOError as e:
             print(
                 f"ERROR: Failed to write log for {agent_name}: {e}",
@@ -175,6 +176,116 @@ class OutputManager:
                 "WARNING: Pipeline will continue, but logs are not being stored.",
                 file=sys.stderr,
             )
+
+    def _blockquote(self, text: str) -> str:
+        """Prefix each line with '> ' for blockquote formatting."""
+        return "\n".join(f"> {line}" for line in text.split("\n"))
+
+    def _format_log_as_markdown(self, log_data: dict[str, Any]) -> str:
+        """Convert log data dictionary to Markdown format.
+
+        Args:
+            log_data: Log data dictionary containing all execution details.
+
+        Returns:
+            Formatted Markdown string.
+        """
+        lines: list[str] = []
+
+        # Header
+        agent_name = log_data.get("agent_name", "unknown")
+        lines.append(f"# {agent_name}")
+        lines.append("")
+
+        # Status table
+        status = log_data.get("status", "unknown")
+        status_indicator = "[OK]" if status == "success" else "[ERR]"
+        timestamp_start = log_data.get("timestamp_start", "N/A")
+        timestamp_end = log_data.get("timestamp_end", "N/A")
+        duration = log_data.get("duration_seconds")
+        duration_str = f"{duration:.2f}s" if duration is not None else "N/A"
+        model = log_data.get("model", "N/A")
+
+        lines.append("| Field | Value |")
+        lines.append("|-------|-------|")
+        lines.append(f"| Status | {status_indicator} {status} |")
+        lines.append(f"| Started | {timestamp_start} |")
+        lines.append(f"| Ended | {timestamp_end} |")
+        lines.append(f"| Duration | {duration_str} |")
+        lines.append(f"| Model | {model} |")
+        lines.append("")
+
+        # Parameters section
+        input_data = log_data.get("input") or {}
+        temperature = input_data.get("temperature")
+        max_tokens = input_data.get("max_tokens")
+
+        if temperature is not None or max_tokens is not None:
+            lines.append("## Parameters")
+            lines.append("")
+            lines.append("| Parameter | Value |")
+            lines.append("|-----------|-------|")
+            if temperature is not None:
+                lines.append(f"| temperature | {temperature} |")
+            if max_tokens is not None:
+                lines.append(f"| max_tokens | {max_tokens} |")
+            lines.append("")
+
+        # Input Messages section
+        messages = input_data.get("messages", [])
+        if messages:
+            lines.append("## Input Messages")
+            lines.append("")
+
+            for msg in messages:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                lines.append(f"### {role.capitalize()}")
+                lines.append("")
+                lines.append(self._blockquote(content))
+                lines.append("")
+
+        # Output section
+        lines.append("## Output")
+        lines.append("")
+        output_data = log_data.get("output") or {}
+        output_content = output_data.get("content", "")
+        if output_content:
+            lines.append(self._blockquote(output_content))
+        else:
+            lines.append("None")
+        lines.append("")
+
+        # Error section
+        lines.append("## Error")
+        lines.append("")
+        error = log_data.get("error")
+        if error:
+            lines.append(self._blockquote(error))
+        else:
+            lines.append("None")
+        lines.append("")
+
+        # Retries section (only if retries occurred)
+        retries = log_data.get("retries", 0)
+        if retries > 0:
+            lines.append("## Retries")
+            lines.append("")
+            lines.append(f"**Total retries:** {retries}")
+            lines.append("")
+
+            retry_details = log_data.get("retry_details", [])
+            if retry_details:
+                lines.append("| Attempt | Timestamp | Error |")
+                lines.append("|---------|-----------|-------|")
+                for detail in retry_details:
+                    attempt = detail.get("attempt", "?")
+                    timestamp = detail.get("timestamp", "N/A")
+                    retry_error = detail.get("error", "Unknown")
+                    lines.append(f"| {attempt} | {timestamp} | {retry_error} |")
+                lines.append("")
+
+        return "\n".join(lines)
 
     def save_run_metadata(self, metadata: dict[str, Any]) -> None:
         """Save run metadata to run_metadata.json.

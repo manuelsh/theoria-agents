@@ -84,22 +84,15 @@ class BaseAgent(ABC):
             Complete prompt string
 
         Raises:
-            FileNotFoundError: If prompt file doesn't exist and no prompt_template fallback
+            FileNotFoundError: If prompt file doesn't exist
         """
-        # Try to load from prompt registry
-        try:
-            if self._prompt_registry is None:
-                # Lazy load the registry
-                from prompts.registry import PromptRegistry
-                prompts_dir = Path(__file__).parent.parent.parent / "prompts"
-                self._prompt_registry = PromptRegistry(prompts_dir)
+        if self._prompt_registry is None:
+            # Lazy load the registry
+            from prompts.registry import PromptRegistry
+            prompts_dir = Path(__file__).parent.parent.parent / "prompts"
+            self._prompt_registry = PromptRegistry(prompts_dir)
 
-            return self._prompt_registry.get_prompt(self.agent_name)
-        except (FileNotFoundError, ImportError):
-            # Fallback to prompt_template if it exists
-            if hasattr(self, "prompt_template"):
-                return self.prompt_template
-            raise
+        return self._prompt_registry.get_prompt(self.agent_name)
 
     def build_messages(
         self,

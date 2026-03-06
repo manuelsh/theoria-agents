@@ -9,13 +9,38 @@ from src.orchestrator import PipelineOrchestrator
 from src.utils.validation import run_full_test, check_docker_running
 
 
-def main() -> int:
-    """Main entry point for the CLI."""
+def create_parser() -> argparse.ArgumentParser:
+    """Create the argument parser with subcommands.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(
-        prog="theoria-generate",
-        description="Generate high-quality theoretical physics dataset entries using LLM agents.",
+        prog="theoria-agent",
+        description="Multi-agent LLM system for theoria-dataset.",
     )
 
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Generate subcommand
+    generate_parser = subparsers.add_parser(
+        "generate",
+        help="Generate a new dataset entry",
+    )
+    _add_generate_arguments(generate_parser)
+
+    # Review subcommand
+    review_parser = subparsers.add_parser(
+        "review",
+        help="Review and improve an existing entry",
+    )
+    _add_review_arguments(review_parser)
+
+    return parser
+
+
+def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add arguments for the generate subcommand."""
     parser.add_argument(
         "topic",
         type=str,
@@ -39,7 +64,13 @@ def main() -> int:
         "--output",
         "-o",
         type=str,
-        help="Output directory for the generated entry (default: dataset entries folder)",
+        help="Output directory for the generated entry (default: agents-output/entries/)",
+    )
+
+    parser.add_argument(
+        "--save-to-dataset",
+        action="store_true",
+        help="Save directly to theoria-dataset/entries/ instead of agents-output/",
     )
 
     parser.add_argument(
@@ -68,20 +99,55 @@ def main() -> int:
         help="Print the entry to stdout instead of saving",
     )
 
+
+def _add_review_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add arguments for the review subcommand."""
+    parser.add_argument(
+        "entry",
+        type=str,
+        help="Entry file path or entry ID (resolved from THEORIA_DATASET_PATH)",
+    )
+
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=str,
+        help="Output file path (overwrites input if not specified)",
+    )
+
+    parser.add_argument(
+        "--max-loops",
+        type=int,
+        help="Maximum correction iterations",
+    )
+
+
+def main() -> int:
+    """Main entry point for theoria-agent CLI."""
+    parser = create_parser()
     args = parser.parse_args()
 
-    # Build hints from optional arguments
-    hints = {}
-    if args.domain:
-        hints["domain"] = args.domain
-    if args.depends_on:
-        hints["depends_on"] = args.depends_on
+    if args.command == "generate":
+        # Build hints from optional arguments
+        hints = {}
+        if args.domain:
+            hints["domain"] = args.domain
+        if args.depends_on:
+            hints["depends_on"] = args.depends_on
+        return asyncio.run(run_generate(args, hints))
+    elif args.command == "review":
+        return asyncio.run(run_review(args))
 
-    # Run the pipeline
-    return asyncio.run(run_pipeline(args, hints))
+    return 1
 
 
-async def run_pipeline(args: argparse.Namespace, hints: dict) -> int:
+def generate_main() -> int:
+    """Legacy entry point for theoria-generate command."""
+    sys.argv.insert(1, "generate")
+    return main()
+
+
+async def run_generate(args: argparse.Namespace, hints: dict) -> int:
     """Run the generation pipeline.
 
     Args:
@@ -134,12 +200,26 @@ async def run_pipeline(args: argparse.Namespace, hints: dict) -> int:
                 print(json.dumps(metadata["new_assumptions"], indent=2))
             return 0
 
-        # Save new assumptions first (so the entry references valid IDs)
-        if metadata.get("new_assumptions"):
+        # Determine output directory
+        if args.output:
+            output_dir = Path(args.output)
+        elif args.save_to_dataset:
+            output_dir = None  # Uses dataset entries folder
+        else:
+            # Default: save to agents-output/entries/
+            if orchestrator.output_manager:
+                output_dir = orchestrator.output_manager.entries_path
+            else:
+                # Fallback if output manager not available
+                output_dir = Path("agents-output/entries")
+
+        # Save new assumptions only if saving to dataset
+        if args.save_to_dataset and metadata.get("new_assumptions"):
             orchestrator.save_new_assumptions(metadata["new_assumptions"], entry.result_id)
+        elif metadata.get("new_assumptions"):
+            print("\n      Note: New assumptions not added to dataset (use --save-to-dataset)")
 
         # Save the entry
-        output_dir = Path(args.output) if args.output else None
         output_path = orchestrator.save_entry(entry, output_dir)
         print(f"\nEntry saved to: {output_path}")
 
@@ -162,6 +242,79 @@ async def run_pipeline(args: argparse.Namespace, hints: dict) -> int:
 
     except Exception as e:
         print(f"\nError: {e}", file=sys.stderr)
+        return 1
+
+
+async def run_review(args: argparse.Namespace) -> int:
+    """Run the review command.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        Exit code (0 for success, 1 for failure).
+    """
+    from src.review_entry import resolve_entry_path, load_entry_for_review, review_entry
+
+    try:
+        # Resolve entry path
+        entry_path = resolve_entry_path(args.entry)
+
+        print(f"\n{'='*60}")
+        print(f"Theoria Review - Reviewing: {entry_path}")
+        print(f"{'='*60}\n")
+
+        # Load entry to display info
+        entry = load_entry_for_review(entry_path)
+        print(f"Entry ID: {entry.result_id}")
+        print(f"Entry Name: {entry.result_name}")
+
+        print("\n[1/2] Reviewing entry...")
+
+        # Run review
+        result = await review_entry(entry_path, max_correction_loops=args.max_loops)
+
+        # Determine output path
+        output_path = Path(args.output) if args.output else entry_path
+
+        # Save if there are corrections
+        if result.corrected_entry is not None:
+            print("[2/2] Applying corrections...")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(result.corrected_entry.model_dump_json(indent=2, exclude_none=True))
+        else:
+            print("[2/2] No corrections needed.")
+
+        print(f"\n{'='*60}")
+        print("Review Complete!")
+        print(f"{'='*60}")
+
+        status = "PASSED" if result.passed else "FAILED"
+        if result.corrected_entry is not None:
+            status += " (after corrections)"
+
+        print(f"Status: {status}")
+        print(f"Issues Found: {len(result.issues)}")
+
+        if result.issues:
+            print("\nIssues:")
+            for issue in result.issues:
+                print(f"  - {issue}")
+
+        print(f"Corrections Applied: {'Yes' if result.corrected_entry else 'No'}")
+        print(f"Output: {output_path}")
+
+        return 0 if result.passed else 1
+
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Error: Review failed: {e}", file=sys.stderr)
         return 1
 
 

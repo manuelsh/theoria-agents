@@ -18,7 +18,10 @@ async def fetch_wikipedia(topic: str) -> str:
     # Try to get the Wikipedia page
     search_term = quote(topic.replace(" ", "_"))
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    headers = {
+        "User-Agent": "TheoriaProject/1.0 (https://github.com/theoria-project; educational physics dataset)"
+    }
+    async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
         # First try the Wikipedia API for summary
         api_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{search_term}"
 

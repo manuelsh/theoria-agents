@@ -11,8 +11,10 @@ This document provides guidance for AI agents (like Claude Code) working on the 
 
 ## Specifications files
 
-- The specs to build anything new should be in the .specs file. They should be enumerated sequentially.
-- On top of the specs file you should add:
+- We will use md files to define specifications for new features, improvements, or changes to the agentic behaviour. These files will be stored in the .specs directory.
+- Spec files should be enumerated sequentially.
+- **Always re-read the corresponding spec file before implementing**, as it may have been modified by the user since you last read it. If there are changes but they do not make sense to you, ask the user for clarification.
+- At the beginning of each spec file you should add:
 
 ```
 **Status:** Draft/Completed/Deprecated
@@ -20,7 +22,7 @@ This document provides guidance for AI agents (like Claude Code) working on the 
 **Purpose:** one sentence explanation of what it does
 ```
 
-- When a spec is completed, update the status to "Completed" and add a completion date:
+- When a spec is completed, update the status to "Completed" and add a completion date in that spec file:
 
 ```
 **Status:** Completed
@@ -28,10 +30,6 @@ This document provides guidance for AI agents (like Claude Code) working on the 
 **Completed:** YYYY-MM-DD
 **Purpose:** one sentence explanation of what it does
 ```
-
-### Completed Specifications
-
-- **[3-output-management-system.md](.specs/3-output-management-system.md)** - Structured logging and artifact storage for all agent runs with LLM traceability (Completed: 2026-03-05)
 
 ## Testing Requirements
 

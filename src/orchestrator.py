@@ -209,29 +209,15 @@ class PipelineOrchestrator:
         }
         print(f"      Defined {len(equations_symbols_output.result_equations)} equations, {len(equations_symbols_output.definitions)} symbols")
 
-        # Phase 5: Derivation (to be enhanced with new inputs)
+        # Phase 5: Derivation
         print(f"[5/8] Generating derivation")
-        # TODO: Update DerivationAgent to accept new input structure
-        # For now, create a combined research-like output for backward compatibility
-        from src.models import ResearchOutput
-        legacy_research_output = ResearchOutput(
-            result_id=metadata_output.result_id,
-            result_name=metadata_output.result_name,
-            explanation=metadata_output.explanation,
-            domain=metadata_output.domain,
-            theory_status=metadata_output.theory_status,
-            references=metadata_output.references,
-            assumptions=assumptions_deps_output.assumptions,
-            new_assumptions=assumptions_deps_output.new_assumptions,
-            depends_on=assumptions_deps_output.depends_on,
-            result_equations=equations_symbols_output.result_equations,
-            definitions=equations_symbols_output.definitions,
-            web_context=info_output.web_context,
-            historical_context=info_output.historical_context,
-        )
         derivation = create_agent(DerivationAgent, "derivation", 5)
         derivation_output = await run_agent_with_logging(
-            derivation, legacy_research_output
+            derivation,
+            info_output=info_output,
+            metadata_output=metadata_output,
+            assumptions_deps_output=assumptions_deps_output,
+            equations_symbols_output=equations_symbols_output,
         )
         metadata["phases"]["derivation"] = {
             "steps_count": len(derivation_output.derivation),
@@ -254,15 +240,16 @@ class PipelineOrchestrator:
 
         # Phase 7: Assembly
         print("[7/8] Assembling entry")
-        # TODO: Update AssemblerAgent to accept new input structure
         assembler = create_agent(AssemblerAgent, "assembler", 7)
         entry = await run_agent_with_logging(
             assembler,
-            legacy_research_output,
-            derivation_output,
-            verification_output,
-            contributor_name,
-            contributor_id,
+            info_output=info_output,
+            metadata_output=metadata_output,
+            assumptions_deps_output=assumptions_deps_output,
+            derivation=derivation_output,
+            verification=verification_output,
+            contributor_name=contributor_name,
+            contributor_id=contributor_id,
         )
         metadata["phases"]["assembly"] = {"status": "complete"}
 

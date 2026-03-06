@@ -155,7 +155,7 @@ class TestAgentLogging:
     """Test agent execution logging functionality."""
 
     def test_log_agent_execution_creates_file(self, output_manager, temp_output_path):
-        """Test that logging creates a file in the run folder."""
+        """Test that logging creates a markdown file in the run folder."""
         run_folder = output_manager.create_run_folder("Test Topic", "abc123")
 
         log_data = {
@@ -176,11 +176,11 @@ class TestAgentLogging:
             sequence_number=1,
         )
 
-        expected_file = run_folder / "01_information_gatherer.json"
+        expected_file = run_folder / "01_information_gatherer.md"
         assert expected_file.exists()
 
-    def test_log_agent_execution_json_format(self, output_manager):
-        """Test that logged data is valid JSON with correct format."""
+    def test_log_agent_execution_markdown_format(self, output_manager):
+        """Test that logged data is valid markdown with correct format."""
         run_folder = output_manager.create_run_folder("Test Topic", "abc123")
 
         log_data = {
@@ -201,11 +201,12 @@ class TestAgentLogging:
             sequence_number=1,
         )
 
-        log_file = run_folder / "01_information_gatherer.json"
-        with open(log_file) as f:
-            loaded_data = json.load(f)
+        log_file = run_folder / "01_information_gatherer.md"
+        content = log_file.read_text()
 
-        assert loaded_data == log_data
+        assert "# information_gatherer" in content
+        assert "[OK] success" in content
+        assert "bedrock/test-model" in content
 
     def test_log_agent_execution_sequence_numbers(self, output_manager):
         """Test that sequence numbers are properly formatted."""
@@ -219,11 +220,11 @@ class TestAgentLogging:
 
         # Test single digit
         output_manager.log_agent_execution("agent1", log_data, 1)
-        assert (run_folder / "01_agent1.json").exists()
+        assert (run_folder / "01_agent1.md").exists()
 
         # Test double digit
         output_manager.log_agent_execution("agent2", log_data, 10)
-        assert (run_folder / "10_agent2.json").exists()
+        assert (run_folder / "10_agent2.md").exists()
 
     def test_log_agent_execution_without_run_folder_raises_error(self, output_manager):
         """Test that logging without creating run folder raises error."""
@@ -231,6 +232,118 @@ class TestAgentLogging:
 
         with pytest.raises(RuntimeError, match="No run folder has been created"):
             output_manager.log_agent_execution("test", log_data, 1)
+
+    def test_log_agent_execution_markdown_contains_all_sections(self, output_manager):
+        """Test that markdown log contains all required sections."""
+        run_folder = output_manager.create_run_folder("Test Topic", "abc123")
+
+        log_data = {
+            "agent_name": "test_agent",
+            "timestamp_start": "2026-03-06T14:30:45.123+01:00",
+            "timestamp_end": "2026-03-06T14:30:52.456+01:00",
+            "duration_seconds": 7.333,
+            "model": "bedrock/test-model",
+            "input": {
+                "messages": [
+                    {"role": "system", "content": "System prompt"},
+                    {"role": "user", "content": "User message"},
+                ],
+                "temperature": 0.3,
+                "max_tokens": 4096,
+            },
+            "output": {"content": "Output content"},
+            "status": "success",
+            "error": None,
+        }
+
+        output_manager.log_agent_execution("test_agent", log_data, 1)
+
+        log_file = run_folder / "01_test_agent.md"
+        content = log_file.read_text()
+
+        # Check all sections exist
+        assert "# test_agent" in content
+        assert "## Parameters" in content
+        assert "## Input Messages" in content
+        assert "### System" in content
+        assert "### User" in content
+        assert "## Output" in content
+        assert "## Error" in content
+
+    def test_log_agent_execution_markdown_preserves_newlines(self, output_manager):
+        """Test that markdown preserves newlines in content."""
+        run_folder = output_manager.create_run_folder("Test Topic", "abc123")
+
+        multiline_content = "Line 1\nLine 2\nLine 3"
+        log_data = {
+            "agent_name": "test_agent",
+            "input": {
+                "messages": [{"role": "system", "content": multiline_content}],
+            },
+            "output": {"content": "Response"},
+            "status": "success",
+            "error": None,
+        }
+
+        output_manager.log_agent_execution("test_agent", log_data, 1)
+
+        log_file = run_folder / "01_test_agent.md"
+        content = log_file.read_text()
+
+        # Content should have actual newlines (in blockquote format), not escaped \n
+        assert "> Line 1\n> Line 2\n> Line 3" in content
+        assert "Line 1\\nLine 2" not in content
+
+    def test_log_agent_execution_markdown_with_retries(self, output_manager):
+        """Test that markdown includes retry section when retries occurred."""
+        run_folder = output_manager.create_run_folder("Test Topic", "abc123")
+
+        log_data = {
+            "agent_name": "test_agent",
+            "status": "success",
+            "error": None,
+            "retries": 2,
+            "retry_details": [
+                {
+                    "attempt": 1,
+                    "timestamp": "2026-03-06T14:30:46.000+01:00",
+                    "error": "Timeout",
+                },
+                {
+                    "attempt": 2,
+                    "timestamp": "2026-03-06T14:30:48.000+01:00",
+                    "error": "Parse error",
+                },
+            ],
+        }
+
+        output_manager.log_agent_execution("test_agent", log_data, 1)
+
+        log_file = run_folder / "01_test_agent.md"
+        content = log_file.read_text()
+
+        assert "## Retries" in content
+        assert "**Total retries:** 2" in content
+        assert "Timeout" in content
+        assert "Parse error" in content
+
+    def test_log_agent_execution_markdown_error_status(self, output_manager):
+        """Test that error status is displayed correctly."""
+        run_folder = output_manager.create_run_folder("Test Topic", "abc123")
+
+        log_data = {
+            "agent_name": "test_agent",
+            "status": "error",
+            "error": "ValueError: Invalid JSON response",
+        }
+
+        output_manager.log_agent_execution("test_agent", log_data, 1)
+
+        log_file = run_folder / "01_test_agent.md"
+        content = log_file.read_text()
+
+        assert "[ERR] error" in content
+        assert "ValueError: Invalid JSON response" in content
 
 
 class TestRunMetadata:

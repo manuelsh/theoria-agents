@@ -18,63 +18,6 @@ class AssumptionsDependenciesAgent(BaseAgent):
 
     agent_name = "assumptions_dependencies"
 
-    prompt_template = """You are an expert physics curator identifying assumptions and dependencies for a theoretical physics dataset.
-
-Your task is to identify:
-1. Which existing assumptions apply to this entry
-2. Whether new assumptions are needed
-3. Which existing entries this depends on
-4. Whether any dependencies are missing from the dataset
-
-AVAILABLE ASSUMPTIONS:
-{assumptions_list}
-
-EXISTING ENTRIES:
-{entries_list}
-
-Guidelines for Assumptions:
-- **SELECT existing assumptions** from the list above when applicable
-- **Avoid duplication** - check the existing assumptions carefully
-- **Ensure logical independence** - assumptions should not be consequences of other assumptions
-- **Propose new assumptions** only if genuinely needed and not covered by existing ones
-- Assumption types: "framework", "principle", "approximation", "condition"
-
-Guidelines for Dependencies:
-- **Identify existing entries** this result builds upon or requires
-- **Check dataset** to see if those entries exist
-- **Flag missing dependencies** if foundational entries are needed but not in the dataset
-- Provide clear reasons for missing dependencies
-
-Output Format:
-Return a JSON object:
-{{
-  "assumptions": ["assumption_id_1", "assumption_id_2"],
-  "new_assumptions": [
-    {{
-      "id": "new_assumption_id",
-      "title": "New Assumption Title",
-      "text": "Clear statement of the assumption",
-      "type": "framework|principle|approximation|condition",
-      "mathematical_expressions": ["expr1", "expr2"] (optional),
-      "symbol_definitions": [
-        {{"symbol": "x", "definition": "Definition of x"}}
-      ] (optional)
-    }}
-  ],
-  "depends_on": ["existing_entry_id_1", "existing_entry_id_2"],
-  "missing_dependencies": [
-    {{"id": "suggested_entry_id", "reason": "Why this entry is needed"}}
-  ]
-}}
-
-IMPORTANT:
-- All arrays can be empty (for truly fundamental entries)
-- Only propose new assumptions if existing ones don't cover the need
-- Only flag missing dependencies if they're truly foundational
-- Use existing assumption/entry IDs exactly as provided
-- Check logical independence - don't assume consequences
-"""
-
     async def run(
         self, info_output: InformationGatheringOutput, metadata_output: MetadataOutput
     ) -> AssumptionsDependenciesOutput:
@@ -111,14 +54,19 @@ Theory Status: {metadata_output.theory_status}
 Explanation:
 {metadata_output.explanation}
 
-Web Context:
-{info_output.web_context}
+Web Context (Full):
+{info_output.raw_web_content}
 
 Please identify the assumptions and dependencies for this entry.
 """
 
-        # Build messages with assumptions and entries context
-        prompt = self.prompt_template.format(assumptions_list=assumptions_list, entries_list=entries_list)
+        # Build messages with guidelines, assumptions and entries context
+        guidelines = self.get_guidelines()
+        prompt = self.get_prompt().format(
+            guidelines=guidelines,
+            assumptions_list=assumptions_list,
+            entries_list=entries_list,
+        )
         messages = self.build_messages(user_message, prompt)
 
         # Get LLM response

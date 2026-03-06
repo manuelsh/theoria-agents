@@ -7,12 +7,14 @@ Multi-agent LLM system for generating high-quality theoretical physics dataset e
 This project uses a pipeline of specialized LLM agents to generate rigorous physics derivations. The system follows a **single-responsibility principle** where each agent has one focused task:
 
 ### Phase 1: Research & Foundation (4 agents)
+
 1. **InformationGatherer** - Searches Wikipedia, gathers context and historical information
 2. **MetadataFiller** - Fills entry fields (ID, name, explanation, domain, theory status, etc.)
 3. **AssumptionsDependencies** - Consults dataset to select assumptions and identify dependencies
 4. **EquationsSymbols** - Defines result equations and symbols with correct AsciiMath notation
 
 ### Phase 2: Derivation & Verification (4 agents)
+
 5. **Derivation** - Generates step-by-step mathematical derivations
 6. **Verifier** - Creates and executes SymPy code to verify each step
 7. **Assembler** - Combines all outputs into a valid dataset entry
@@ -42,14 +44,29 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
+### Windows Note
+
+On Windows, you must set UTF-8 encoding before running (required by litellm):
+
+```powershell
+# PowerShell - add to your profile or run before each session
+$env:PYTHONUTF8 = "1"
+theoria-agent generate "topic"
+
+# Or use the provided batch wrapper (from the repo directory)
+.\theoria-agent.bat generate "topic"
+```
+
 ## Configuration
 
 1. Copy the environment template:
+
    ```bash
    cp .env.example .env
    ```
 
 2. Edit `.env` with your values:
+
    ```bash
    # Path to your local theoria-dataset clone (required)
    THEORIA_DATASET_PATH=/path/to/theoria-dataset
@@ -91,16 +108,16 @@ theoria-generate "Dirac equation" --validate
 
 ### Command-Line Options
 
-| Option | Description |
-|--------|-------------|
-| `topic` | Physics topic to generate (required) |
-| `--domain` | Suggested arXiv category (e.g., `quant-ph`) |
-| `--depends-on` | Suggested dependency entry IDs |
-| `--output`, `-o` | Custom output directory |
-| `--contributor-name` | Name for contributor field |
-| `--contributor-id` | ORCID or website for contributor |
-| `--validate` | Run validation after generation |
-| `--dry-run` | Print entry without saving |
+| Option               | Description                                 |
+| -------------------- | ------------------------------------------- |
+| `topic`              | Physics topic to generate (required)        |
+| `--domain`           | Suggested arXiv category (e.g., `quant-ph`) |
+| `--depends-on`       | Suggested dependency entry IDs              |
+| `--output`, `-o`     | Custom output directory                     |
+| `--contributor-name` | Name for contributor field                  |
+| `--contributor-id`   | ORCID or website for contributor            |
+| `--validate`         | Run validation after generation             |
+| `--dry-run`          | Print entry without saving                  |
 
 ### Programmatic Usage
 
@@ -149,6 +166,7 @@ output/
 ### Log Files
 
 Each agent log contains:
+
 - Complete LLM inputs (messages, parameters)
 - Complete LLM outputs (raw and parsed)
 - Execution timing and duration
@@ -159,6 +177,7 @@ Each agent log contains:
 ### Run Metadata
 
 `run_metadata.json` includes:
+
 - Run ID and timestamps
 - Topic and configuration
 - All agents executed
@@ -166,6 +185,7 @@ Each agent log contains:
 - Errors and issues found
 
 This logging enables:
+
 - **Debugging**: Inspect exact LLM calls when issues arise
 - **Auditing**: Track what the pipeline did and why
 - **Analysis**: Understand agent behavior and improve prompts

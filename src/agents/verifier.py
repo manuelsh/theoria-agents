@@ -39,7 +39,7 @@ class VerifierAgent(BaseAgent):
             code_lines = code_lines.split("\n")
 
         verification = ProgrammaticVerification(
-            language="Python 3.11.12",
+            language="python 3.11.12",
             library="sympy 1.13.1",
             code=code_lines,
         )

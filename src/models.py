@@ -42,7 +42,7 @@ class DerivationStep(BaseModel):
 class ProgrammaticVerification(BaseModel):
     """Python/SymPy verification code."""
 
-    language: str = "Python 3.11.12"
+    language: str = "python 3.11.12"
     library: str = "sympy 1.13.1"
     code: list[str]
 
@@ -76,6 +76,7 @@ class InformationGatheringOutput(BaseModel):
     """Output from the InformationGatherer agent."""
 
     web_context: str = Field(..., description="Curated summary of physics concept from web sources")
+    raw_web_content: str = Field(default="", description="Full Wikipedia content for downstream agents")
     historical_context: HistoricalContext | None = None
     suggested_references: list[Reference] = Field(default_factory=list)
 
@@ -122,11 +123,8 @@ class EquationsSymbolsOutput(BaseModel):
     definitions: list[Definition] = Field(..., min_length=1)
 
 
-# === Agent Output Models (Legacy) ===
-
-
 class ProposedAssumption(BaseModel):
-    """A new assumption proposed by the Researcher agent."""
+    """A new assumption proposed by an agent."""
 
     id: str = Field(..., description="Unique ID for the assumption")
     title: str = Field(..., description="Short title")
@@ -134,21 +132,6 @@ class ProposedAssumption(BaseModel):
     type: str = Field(..., description="One of: principle, empirical, approximation")
     mathematical_expressions: list[str] | None = None
     symbol_definitions: list[Definition] | None = None
-
-
-class ResearchOutput(BaseModel):
-    """Output from the Researcher agent."""
-
-    result_id: str
-    result_name: str
-    depends_on: list[str] = Field(default_factory=list)
-    assumptions: list[str] = Field(default_factory=list)
-    new_assumptions: list[ProposedAssumption] = Field(default_factory=list)
-    references: list[Reference] = Field(default_factory=list)
-    domain: str
-    theory_status: str
-    historical_context: HistoricalContext | None = None
-    web_context: str = Field(..., description="Gathered web research context")
 
 
 class DerivationOutput(BaseModel):

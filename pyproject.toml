@@ -3,24 +3,25 @@ name = "theoria-agents"
 version = "0.1.0"
 description = "Multi-agent LLM system for generating high-quality theoretical physics dataset entries"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
-    "litellm>=1.0.0",
-    "pydantic>=2.0.0",
-    "pyyaml>=6.0.0",
-    "python-dotenv>=1.0.0",
-    "httpx>=0.27.0",
-    "boto3>=1.34.0",
+    "litellm~=1.67.0",
+    "pydantic~=2.10.0",
+    "pyyaml~=6.0.2",
+    "python-dotenv~=1.0.1",
+    "httpx~=0.28.1",
+    "boto3~=1.36.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
+    "pytest~=8.3.0",
+    "pytest-asyncio~=0.25.0",
 ]
 
 [project.scripts]
-theoria-generate = "src.cli:main"
+theoria-agent = "src.entry:main"
+theoria-generate = "src.entry:generate_main"
 
 [build-system]
 requires = ["hatchling"]

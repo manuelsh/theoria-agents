@@ -2,11 +2,13 @@
 
 from src.agents.base import BaseAgent
 from src.models import (
+    AssumptionsDependenciesOutput,
+    Contributor,
     DerivationOutput,
-    ResearchOutput,
+    InformationGatheringOutput,
+    MetadataOutput,
     TheoriaEntry,
     VerifierOutput,
-    Contributor,
 )
 
 
@@ -17,39 +19,42 @@ class AssemblerAgent(BaseAgent):
 
     async def run(
         self,
-        research: ResearchOutput,
+        info_output: InformationGatheringOutput,
+        metadata_output: MetadataOutput,
+        assumptions_deps_output: AssumptionsDependenciesOutput,
         derivation: DerivationOutput,
         verification: VerifierOutput,
         contributor_name: str = "Theoria Agents",
-        contributor_id: str = "https://github.com/theoria-agents",
+        contributor_id: str = "https://github.com/manuelsh/theoria-agents",
     ) -> TheoriaEntry:
         """Assemble all outputs into a complete entry.
 
         Args:
-            research: Output from Researcher agent.
-            derivation: Output from Derivation agent.
-            verification: Output from Verifier agent.
+            info_output: Output from InformationGathererAgent
+            metadata_output: Output from MetadataFillerAgent
+            assumptions_deps_output: Output from AssumptionsDependenciesAgent
+            derivation: Output from DerivationAgent
+            verification: Output from VerifierAgent
             contributor_name: Name of the contributor.
             contributor_id: Contributor identifier (ORCID, website, etc.).
 
         Returns:
             Complete TheoriaEntry ready for validation.
         """
-        # Assemble the entry directly (no LLM needed for this step)
         entry = TheoriaEntry(
-            result_id=research.result_id,
-            result_name=research.result_name,
+            result_id=metadata_output.result_id,
+            result_name=metadata_output.result_name,
             result_equations=derivation.result_equations,
             explanation=derivation.explanation,
             definitions=derivation.definitions,
-            assumptions=research.assumptions,
-            depends_on=research.depends_on,
+            assumptions=assumptions_deps_output.assumptions,
+            depends_on=assumptions_deps_output.depends_on,
             derivation=derivation.derivation,
             programmatic_verification=verification.programmatic_verification,
-            domain=research.domain,
-            theory_status=research.theory_status,
-            historical_context=research.historical_context,
-            references=research.references,
+            domain=metadata_output.domain,
+            theory_status=metadata_output.theory_status,
+            historical_context=info_output.historical_context,
+            references=metadata_output.references,
             contributors=[
                 Contributor(full_name=contributor_name, identifier=contributor_id)
             ],
