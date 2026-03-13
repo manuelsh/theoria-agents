@@ -36,9 +36,11 @@ class AgentLogger:
         self.timestamp_end: str | None = None
         self.duration_seconds: float | None = None
 
-        # LLM interaction data
-        self.input_data: dict[str, Any] | None = None
-        self.output_data: dict[str, Any] | None = None
+        # LLM interaction data (supports multiple calls)
+        self.llm_calls: list[dict[str, Any]] = []
+
+        # Iteration metadata (for reviewer agent)
+        self.iteration_metadata: list[dict[str, Any]] = []
 
         # Status tracking
         self.status: str = "success"
@@ -97,6 +99,7 @@ class AgentLogger:
         input_data: dict[str, Any],
         output_data: dict[str, Any],
         model: str,
+        iteration: int | None = None,
     ) -> None:
         """Log LLM input and output.
 
@@ -104,10 +107,37 @@ class AgentLogger:
             input_data: Input sent to LLM (messages, parameters, etc.).
             output_data: Output received from LLM.
             model: Model identifier used for this call.
+            iteration: Optional iteration number (for multi-iteration agents).
         """
-        self.input_data = input_data
-        self.output_data = output_data
-        self.model = model
+        self.llm_calls.append({
+            "iteration": iteration,
+            "model": model,
+            "input": input_data,
+            "output": output_data,
+        })
+        self.model = model  # Keep last model for summary
+
+    def log_iteration(
+        self,
+        iteration: int,
+        issues_found: int,
+        issues: list[str],
+        corrections_applied: bool,
+    ) -> None:
+        """Log iteration metadata for multi-iteration agents like reviewer.
+
+        Args:
+            iteration: Iteration number (1-indexed).
+            issues_found: Number of issues found in this iteration.
+            issues: List of issue descriptions.
+            corrections_applied: Whether corrections were applied.
+        """
+        self.iteration_metadata.append({
+            "iteration": iteration,
+            "issues_found": issues_found,
+            "issues": issues,
+            "corrections_applied": corrections_applied,
+        })
 
     def log_error(self, error: Exception) -> None:
         """Log an error that occurred during execution.
@@ -134,23 +164,66 @@ class AgentLogger:
             }
         )
 
+    def get_total_cost(self) -> float:
+        """Calculate total cost from all LLM calls.
+
+        Returns:
+            Total cost in USD.
+        """
+        total = 0.0
+        for call in self.llm_calls:
+            output = call.get("output", {})
+            if output:
+                total += output.get("cost", 0.0) or 0.0
+        return total
+
+    def get_total_tokens(self) -> dict[str, int]:
+        """Calculate total tokens from all LLM calls.
+
+        Returns:
+            Dict with prompt_tokens, completion_tokens, total_tokens.
+        """
+        totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        for call in self.llm_calls:
+            output = call.get("output", {})
+            usage = output.get("usage") if output else None
+            if usage:
+                totals["prompt_tokens"] += usage.get("prompt_tokens", 0) or 0
+                totals["completion_tokens"] += usage.get("completion_tokens", 0) or 0
+                totals["total_tokens"] += usage.get("total_tokens", 0) or 0
+        return totals
+
     def get_log_data(self) -> dict[str, Any]:
         """Build complete log data structure.
 
         Returns:
             Dictionary containing all log data.
         """
+        # For backward compatibility, extract first call's input/output if available
+        input_data = self.llm_calls[0]["input"] if self.llm_calls else None
+        output_data = self.llm_calls[0]["output"] if self.llm_calls else None
+
         log_data = {
             "agent_name": self.agent_name,
             "timestamp_start": self.timestamp_start,
             "timestamp_end": self.timestamp_end,
             "duration_seconds": self.duration_seconds,
             "model": self.model,
-            "input": self.input_data,
-            "output": self.output_data,
+            "input": input_data,
+            "output": output_data,
             "status": self.status,
             "error": self.error,
+            "total_cost": self.get_total_cost(),
+            "total_tokens": self.get_total_tokens(),
         }
+
+        # Include all LLM calls if more than one
+        if len(self.llm_calls) > 1:
+            log_data["llm_calls"] = self.llm_calls
+
+        # Include iteration metadata if present
+        if self.iteration_metadata:
+            log_data["iterations"] = self.iteration_metadata
 
         # Only include retry info if retries occurred
         if self.retries > 0:

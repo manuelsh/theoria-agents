@@ -215,6 +215,29 @@ class OutputManager:
         lines.append(f"| Model | {model} |")
         lines.append("")
 
+        # Review Iterations section (for reviewer agent)
+        iterations = log_data.get("iterations", [])
+        if iterations:
+            lines.append("## Review Iterations")
+            lines.append("")
+            for it in iterations:
+                iter_num = it.get("iteration", "?")
+                issues_found = it.get("issues_found", 0)
+                corrections = it.get("corrections_applied", False)
+                lines.append(f"### Iteration {iter_num}")
+                lines.append(f"**Issues found:** {issues_found}")
+                lines.append(f"**Corrections applied:** {corrections}")
+                issues = it.get("issues", [])
+                if issues:
+                    lines.append("")
+                    for issue in issues[:10]:  # Limit to first 10
+                        # Truncate long issues
+                        issue_text = issue[:200] + "..." if len(issue) > 200 else issue
+                        lines.append(f"- {issue_text}")
+                    if len(issues) > 10:
+                        lines.append(f"- ... and {len(issues) - 10} more issues")
+                lines.append("")
+
         # Parameters section
         input_data = log_data.get("input") or {}
         temperature = input_data.get("temperature")
@@ -265,6 +288,37 @@ class OutputManager:
         else:
             lines.append("None")
         lines.append("")
+
+        # Additional LLM Calls section (for multi-iteration agents)
+        llm_calls = log_data.get("llm_calls", [])
+        if llm_calls and len(llm_calls) > 1:
+            lines.append("## Additional LLM Calls")
+            lines.append("")
+            # Skip first call (already shown above), show subsequent calls
+            for i, call in enumerate(llm_calls[1:], 2):
+                iter_label = f" (Iteration {call['iteration']})" if call.get("iteration") else ""
+                lines.append(f"### Call {i}{iter_label}")
+                lines.append("")
+                call_input = call.get("input") or {}
+                call_messages = call_input.get("messages", [])
+                if call_messages:
+                    for msg in call_messages:
+                        role = msg.get("role", "unknown")
+                        content = msg.get("content", "")
+                        # Truncate long content
+                        if len(content) > 500:
+                            content = content[:500] + "\n... (truncated)"
+                        lines.append(f"**{role.capitalize()}:**")
+                        lines.append(self._blockquote(content))
+                        lines.append("")
+                call_output = call.get("output") or {}
+                call_output_content = call_output.get("content", "")
+                if call_output_content:
+                    if len(call_output_content) > 500:
+                        call_output_content = call_output_content[:500] + "\n... (truncated)"
+                    lines.append("**Output:**")
+                    lines.append(self._blockquote(call_output_content))
+                    lines.append("")
 
         # Retries section (only if retries occurred)
         retries = log_data.get("retries", 0)
@@ -321,17 +375,17 @@ class OutputManager:
 
         Args:
             entry_data: Complete entry data dictionary.
-                Must contain 'name' field.
+                Must contain 'result_id' field.
 
         Raises:
-            ValueError: If entry_data doesn't contain 'name' field.
+            ValueError: If entry_data doesn't contain 'result_id' field.
         """
-        if "name" not in entry_data:
-            raise ValueError("entry_data must contain 'name' field")
+        if "result_id" not in entry_data:
+            raise ValueError("entry_data must contain 'result_id' field")
 
-        entry_name = entry_data["name"]
-        entry_folder = self.entries_path / entry_name
-        entry_file = entry_folder / f"{entry_name}.json"
+        entry_id = entry_data["result_id"]
+        entry_folder = self.entries_path / entry_id
+        entry_file = entry_folder / f"{entry_id}.json"
 
         try:
             entry_folder.mkdir(parents=True, exist_ok=True)
@@ -339,7 +393,7 @@ class OutputManager:
                 json.dump(entry_data, f, indent=2)
         except IOError as e:
             print(
-                f"ERROR: Failed to save entry {entry_name}: {e}",
+                f"ERROR: Failed to save entry {entry_id}: {e}",
                 file=sys.stderr,
             )
             print(

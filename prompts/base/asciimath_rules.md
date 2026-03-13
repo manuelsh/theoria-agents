@@ -12,4 +12,4 @@
 - Avoid "to" in subscripts: `N_(all)` not `N_total` (renders as arrow)
 - Proper function notation: `u(nu,T)` not `u_nu_T`
 - Exponential formatting: `e^((h*nu)/(k_B*T))` for clarity
-- Text in equations: Use `text{constant}` NOT `text(constant)`
+- Text in equations: Use `text{{constant}}` NOT `text(constant)`

@@ -94,12 +94,14 @@ def load_entry_for_review(path: str | Path) -> TheoriaEntry:
 async def review_entry(
     path: str | Path,
     max_correction_loops: int | None = None,
+    resume_state: dict | None = None,
 ) -> ReviewResult:
     """Review an entry and return the result.
 
     Args:
         path: Path to entry file.
         max_correction_loops: Override config max loops (optional).
+        resume_state: Resume from previous state (optional).
 
     Returns:
         ReviewResult with pass/fail status and corrections.
@@ -112,13 +114,24 @@ async def review_entry(
     # Determine max loops
     if max_correction_loops is None:
         reviewer_config = config.get("reviewer", {})
-        max_correction_loops = reviewer_config.get("max_correction_loops", 3)
+        max_correction_loops = reviewer_config.get("max_correction_loops") or 3
+
+    # If resuming, adjust max loops to account for previous iterations
+    if resume_state:
+        start_iteration = resume_state.get("iterations_completed", 0)
+        # Add remaining loops to the already completed iterations
+        max_correction_loops = start_iteration + max_correction_loops
 
     # Load the entry
     entry = load_entry_for_review(path)
 
     # Run the reviewer
     reviewer = ReviewerAgent(max_correction_loops=max_correction_loops)
+
+    # Restore previous iteration log if resuming
+    if resume_state:
+        reviewer.iteration_log = resume_state.get("iteration_log", [])
+
     result = await reviewer.run(entry)
 
     return result

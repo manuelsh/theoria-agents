@@ -1,9 +1,35 @@
 """Web search utilities for the Researcher agent."""
 
+import html as html_module
 import re
 from urllib.parse import quote
 
 import httpx
+
+
+def _strip_html_tags(html: str) -> str:
+    """Strip HTML tags and convert to plain text."""
+    # Convert headers to markdown-style
+    html = re.sub(r'<h2[^>]*>([^<]*)</h2>', r'\n\n## \1\n', html)
+    html = re.sub(r'<h3[^>]*>([^<]*)</h3>', r'\n\n### \1\n', html)
+    html = re.sub(r'<h4[^>]*>([^<]*)</h4>', r'\n\n#### \1\n', html)
+    # Convert paragraphs to double newlines
+    html = re.sub(r'</p>', '\n\n', html)
+    # Convert list items
+    html = re.sub(r'<li[^>]*>', '\n- ', html)
+    # Remove all other tags
+    html = re.sub(r'<[^>]+>', ' ', html)
+    # Unescape HTML entities
+    html = html_module.unescape(html)
+    return html
+
+
+def _clean_wiki_text(text: str) -> str:
+    """Minimal cleanup of Wikipedia text - just basic whitespace normalization."""
+    # Clean up multiple whitespace/newlines
+    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+    text = re.sub(r'  +', ' ', text)
+    return text.strip()
 
 
 async def fetch_wikipedia(topic: str) -> str:
@@ -33,11 +59,12 @@ async def fetch_wikipedia(topic: str) -> str:
                 title = data.get("title", topic)
                 extract = data.get("extract", "")
 
-                # Also try to get the full content
+                # Get full content using HTML extraction (better structure than plaintext)
+                resolved_title = quote(title.replace(" ", "_"))
                 content_url = (
                     f"https://en.wikipedia.org/w/api.php?"
-                    f"action=query&prop=extracts&exintro=0&explaintext=1&"
-                    f"titles={search_term}&format=json"
+                    f"action=query&prop=extracts&"
+                    f"titles={resolved_title}&format=json"
                 )
                 content_response = await client.get(content_url, follow_redirects=True)
 
@@ -46,17 +73,24 @@ async def fetch_wikipedia(topic: str) -> str:
                     content_data = content_response.json()
                     pages = content_data.get("query", {}).get("pages", {})
                     for page in pages.values():
-                        full_content = page.get("extract", "")
+                        html_content = page.get("extract", "")
+                        if html_content:
+                            # Convert HTML to plain text with structure
+                            full_content = _strip_html_tags(html_content)
                         break
+
+                # Clean up any math markup artifacts
+                if full_content:
+                    full_content = _clean_wiki_text(full_content)
 
                 # Combine summary and content
                 result = f"# {title}\n\n"
                 if extract:
                     result += f"## Summary\n{extract}\n\n"
                 if full_content:
-                    # Truncate to reasonable length
-                    if len(full_content) > 10000:
-                        full_content = full_content[:10000] + "...[truncated]"
+                    # Truncate to reasonable length (50K chars ~= 12-15K tokens)
+                    if len(full_content) > 50000:
+                        full_content = full_content[:50000] + "...[truncated]"
                     result += f"## Full Content\n{full_content}\n"
 
                 return result

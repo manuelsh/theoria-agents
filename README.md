@@ -106,7 +106,7 @@ theoria-generate "Heisenberg uncertainty principle" --dry-run
 theoria-generate "Dirac equation" --validate
 ```
 
-### Command-Line Options
+### Command-Line Options (Generate)
 
 | Option               | Description                                 |
 | -------------------- | ------------------------------------------- |
@@ -118,6 +118,40 @@ theoria-generate "Dirac equation" --validate
 | `--contributor-id`   | ORCID or website for contributor            |
 | `--validate`         | Run validation after generation             |
 | `--dry-run`          | Print entry without saving                  |
+| `--max-loops`        | Maximum review correction iterations (default: 3) |
+
+### Review an Entry
+
+```bash
+# Review an existing entry
+theoria-agent review hamilton_jacobi_equation
+
+# Review with custom iteration count
+theoria-agent review hamilton_jacobi_equation --max-loops 5
+
+# Resume a review from saved state (after manual fixes)
+theoria-agent review hamilton_jacobi_equation --resume hamilton_jacobi_equation.review_state.json
+```
+
+### Command-Line Options (Review)
+
+| Option               | Description                                 |
+| -------------------- | ------------------------------------------- |
+| `entry`              | Entry file path or entry ID (required)      |
+| `--output`, `-o`     | Output file path (overwrites input if not specified) |
+| `--max-loops`        | Maximum correction iterations               |
+| `--resume`           | Resume review from saved state file         |
+
+### Review Behavior
+
+The reviewer agent has smart stopping behavior:
+- **Stops on success**: When no issues are found
+- **Stops on stuck**: When issues don't decrease between iterations
+- **Saves state**: When max iterations reached with issues remaining
+
+When a review fails to fix all issues, a `.review_state.json` file is saved. You can then:
+1. Manually fix some issues in the entry
+2. Resume the review with `--resume` to continue from where it left off
 
 ### Programmatic Usage
 
@@ -241,7 +275,10 @@ Phase 2: Derivation & Verification
 
 - Guidelines loaded dynamically from theoria-dataset
 - SymPy verification code is executed to check correctness
-- Reviewer agent performs up to 3 self-correction iterations
+- Reviewer agent performs self-correction iterations with smart stopping:
+  - Stops when no issues remain
+  - Stops when no improvement is detected (stuck)
+  - Saves state for manual intervention when max iterations reached
 - Final validation uses theoria-dataset's own test infrastructure
 
 ## Configuration Files

@@ -157,6 +157,8 @@ class ReviewResult(BaseModel):
     passed: bool
     issues: list[str] = Field(default_factory=list)
     corrected_entry: Any | None = None  # TheoriaEntry, avoiding circular import
+    reviewer_state: dict[str, Any] | None = None  # For resume support
+    failure_reason: str | None = None  # Why the review failed (if not passed)
 
 
 # === Entry Assembly ===

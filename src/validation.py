@@ -5,6 +5,8 @@ following the Single Source of Truth principle.
 """
 
 import json
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -80,3 +82,57 @@ class EntryValidator:
         errors = self.validate(entry)
         if errors:
             raise ValidationError(f"Entry validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
+
+    def run_dataset_validation(self, entry: dict[str, Any]) -> tuple[bool, str]:
+        """Run theoria-dataset's validation scripts on an entry.
+
+        Writes the entry to a temporary file in theoria-dataset/entries/,
+        runs `make test-entry FILE=<entry_name>`, then cleans up.
+
+        Args:
+            entry: Entry data as a dict.
+
+        Returns:
+            Tuple of (success, output). Success is True if validation passes.
+        """
+        entry_id = entry.get("result_id", "temp_entry")
+        entries_dir = self.dataset_path / "entries"
+        temp_entry_path = entries_dir / f"{entry_id}.json"
+
+        # Check if file already exists (don't overwrite)
+        original_exists = temp_entry_path.exists()
+        original_content = None
+        if original_exists:
+            with open(temp_entry_path) as f:
+                original_content = f.read()
+
+        try:
+            # Write entry to file
+            with open(temp_entry_path, "w") as f:
+                json.dump(entry, f, indent=2)
+
+            # Run make test-entry
+            result = subprocess.run(
+                ["make", "test-entry", f"FILE={entry_id}"],
+                cwd=str(self.dataset_path),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+
+            output = result.stdout + result.stderr
+            success = result.returncode == 0
+
+            return success, output
+
+        except subprocess.TimeoutExpired:
+            return False, "Validation timed out (120s limit)"
+        except Exception as e:
+            return False, f"Validation error: {str(e)}"
+        finally:
+            # Restore original file or clean up
+            if original_exists and original_content is not None:
+                with open(temp_entry_path, "w") as f:
+                    f.write(original_content)
+            elif not original_exists and temp_entry_path.exists():
+                temp_entry_path.unlink()

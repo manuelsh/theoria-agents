@@ -70,9 +70,25 @@ class LLMClient:
                 )
                 content = response.choices[0].message.content or ""
 
+                # Extract usage and cost from response
+                usage = None
+                cost = 0.0
+                if hasattr(response, "usage") and response.usage:
+                    usage = {
+                        "prompt_tokens": response.usage.prompt_tokens or 0,
+                        "completion_tokens": response.usage.completion_tokens or 0,
+                        "total_tokens": response.usage.total_tokens or 0,
+                    }
+                if hasattr(response, "_hidden_params"):
+                    cost = response._hidden_params.get("response_cost", 0.0) or 0.0
+
                 # Call log callback if provided
                 if self.log_callback:
-                    output_data = {"content": content}
+                    output_data = {
+                        "content": content,
+                        "usage": usage,
+                        "cost": cost,
+                    }
                     self.log_callback(input_data, output_data, model)
 
                 return content

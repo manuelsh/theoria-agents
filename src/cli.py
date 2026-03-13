@@ -99,6 +99,12 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         help="Print the entry to stdout instead of saving",
     )
 
+    parser.add_argument(
+        "--max-loops",
+        type=int,
+        help="Maximum review correction iterations (default: 3)",
+    )
+
 
 def _add_review_arguments(parser: argparse.ArgumentParser) -> None:
     """Add arguments for the review subcommand."""
@@ -119,6 +125,13 @@ def _add_review_arguments(parser: argparse.ArgumentParser) -> None:
         "--max-loops",
         type=int,
         help="Maximum correction iterations",
+    )
+
+    parser.add_argument(
+        "--resume",
+        type=str,
+        metavar="STATE_FILE",
+        help="Resume review from saved state file",
     )
 
 
@@ -169,6 +182,7 @@ async def run_generate(args: argparse.Namespace, hints: dict) -> int:
             hints=hints,
             contributor_name=args.contributor_name,
             contributor_id=args.contributor_id,
+            max_review_loops=args.max_loops,
         )
 
         print(f"\n{'='*60}")
@@ -269,10 +283,22 @@ async def run_review(args: argparse.Namespace) -> int:
         print(f"Entry ID: {entry.result_id}")
         print(f"Entry Name: {entry.result_name}")
 
+        # Load resume state if provided
+        resume_state = None
+        if args.resume:
+            from src.agents.reviewer import ReviewerAgent
+            resume_state = ReviewerAgent.load_state(args.resume)
+            print(f"Resuming from iteration {resume_state['iterations_completed']}")
+            print(f"Previous issues: {len(resume_state['last_issues'])}")
+
         print("\n[1/2] Reviewing entry...")
 
         # Run review
-        result = await review_entry(entry_path, max_correction_loops=args.max_loops)
+        result = await review_entry(
+            entry_path,
+            max_correction_loops=args.max_loops,
+            resume_state=resume_state,
+        )
 
         # Determine output path
         output_path = Path(args.output) if args.output else entry_path
@@ -290,9 +316,14 @@ async def run_review(args: argparse.Namespace) -> int:
         print("Review Complete!")
         print(f"{'='*60}")
 
-        status = "PASSED" if result.passed else "FAILED"
-        if result.corrected_entry is not None:
-            status += " (after corrections)"
+        if result.passed:
+            status = "PASSED"
+            if result.corrected_entry is not None:
+                status += " (after corrections)"
+        else:
+            status = "FAILED"
+            if result.failure_reason:
+                status += f" - {result.failure_reason}"
 
         print(f"Status: {status}")
         print(f"Issues Found: {len(result.issues)}")
@@ -304,6 +335,26 @@ async def run_review(args: argparse.Namespace) -> int:
 
         print(f"Corrections Applied: {'Yes' if result.corrected_entry else 'No'}")
         print(f"Output: {output_path}")
+
+        # Save state for resume if review failed with issues
+        if not result.passed and result.issues:
+            if hasattr(result, 'reviewer_state') and result.reviewer_state:
+                from src.agents.reviewer import ReviewerAgent
+                from src.llm.config import get_output_path, load_config
+
+                # Save to output/review_states/ folder
+                config = load_config()
+                output_base = get_output_path(config)
+                review_states_dir = output_base / "review_states"
+                review_states_dir.mkdir(parents=True, exist_ok=True)
+                state_file = review_states_dir / f"{entry_path.stem}.review_state.json"
+
+                reviewer = ReviewerAgent()
+                reviewer.iteration_log = result.reviewer_state.get('iteration_log', [])
+                reviewer.max_correction_loops = result.reviewer_state.get('max_correction_loops', 3)
+                reviewer.save_state(state_file)
+                print(f"\nReview state saved to: {state_file}")
+                print(f"To resume: theoria-agent review {args.entry} --resume {state_file}")
 
         return 0 if result.passed else 1
 

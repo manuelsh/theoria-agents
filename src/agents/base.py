@@ -52,6 +52,9 @@ class BaseAgent(ABC):
         # Initialize prompt registry (lazy loading)
         self._prompt_registry = None
 
+        # Current iteration for multi-iteration agents (like reviewer)
+        self._current_iteration: int | None = None
+
     def _create_log_callback(self) -> Any:
         """Create a callback function for LLM logging.
 
@@ -65,7 +68,9 @@ class BaseAgent(ABC):
             model: str,
         ) -> None:
             if self.agent_logger:
-                self.agent_logger.log_llm_call(input_data, output_data, model)
+                self.agent_logger.log_llm_call(
+                    input_data, output_data, model, self._current_iteration
+                )
 
         return log_callback
 

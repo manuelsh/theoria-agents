@@ -69,6 +69,7 @@ class PipelineOrchestrator:
         hints: dict[str, Any] | None = None,
         contributor_name: str = "Theoria Agents",
         contributor_id: str = "https://github.com/theoria-agents",
+        max_review_loops: int | None = None,
     ) -> tuple[TheoriaEntry, dict[str, Any]]:
         """Generate a complete dataset entry for a physics topic.
 
@@ -108,6 +109,11 @@ class PipelineOrchestrator:
             "phases": {},
         }
 
+        # Cost tracking
+        total_cost = 0.0
+        total_tokens = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        cost_by_agent: dict[str, float] = {}
+
         # Initialize agents with loggers
         def create_agent(agent_class, agent_name, sequence_num, **kwargs):
             """Helper to create agent with optional logger."""
@@ -127,9 +133,19 @@ class PipelineOrchestrator:
 
         async def run_agent_with_logging(agent, *args, **kwargs):
             """Helper to run agent with optional logging context."""
+            nonlocal total_cost, total_tokens
             if agent.agent_logger:
                 with agent.agent_logger:
-                    return await agent.run(*args, **kwargs)
+                    result = await agent.run(*args, **kwargs)
+                # Accumulate costs after agent completes
+                agent_cost = agent.agent_logger.get_total_cost()
+                agent_tokens = agent.agent_logger.get_total_tokens()
+                total_cost += agent_cost
+                total_tokens["prompt_tokens"] += agent_tokens["prompt_tokens"]
+                total_tokens["completion_tokens"] += agent_tokens["completion_tokens"]
+                total_tokens["total_tokens"] += agent_tokens["total_tokens"]
+                cost_by_agent[agent.agent_name] = agent_cost
+                return result
             else:
                 return await agent.run(*args, **kwargs)
 
@@ -253,12 +269,13 @@ class PipelineOrchestrator:
         )
         metadata["phases"]["assembly"] = {"status": "complete"}
 
-        # Phase 8: Review and self-correction
+        # Phase 8: Review and self-correction (includes dataset validation)
         print("[8/8] Reviewing and correcting entry")
-        reviewer_config = self.config.get("reviewer", {})
-        max_loops = reviewer_config.get("max_correction_loops", 3)
+        if max_review_loops is None:
+            reviewer_config = self.config.get("reviewer", {})
+            max_review_loops = reviewer_config.get("max_correction_loops", 3)
         reviewer = create_agent(
-            ReviewerAgent, "reviewer", 8, max_correction_loops=max_loops
+            ReviewerAgent, "reviewer", 8, max_correction_loops=max_review_loops
         )
         review_result = await run_agent_with_logging(reviewer, entry)
         metadata["phases"]["review"] = {
@@ -329,6 +346,11 @@ class PipelineOrchestrator:
                 "entry_name": entry.result_name,
                 "validation_passed": len(review_result.issues) == 0,
                 "errors": [str(issue) for issue in review_result.issues],
+                "cost": {
+                    "total_cost_usd": total_cost,
+                    "total_tokens": total_tokens,
+                    "cost_by_agent": cost_by_agent,
+                },
             }
 
             try:
@@ -347,9 +369,28 @@ class PipelineOrchestrator:
 
                 print(f"\nOutputs saved to: {self.output_manager.get_current_run_folder().parent.parent}")
                 print(f"  - Logs: {self.output_manager.get_current_run_folder()}")
-                print(f"  - Entry: {self.output_manager.entries_path / entry.result_name}")
+                print(f"  - Entry: {self.output_manager.entries_path / entry.result_id}")
             except Exception as e:
                 print(f"WARNING: Failed to save outputs: {e}", file=sys.stderr)
+
+        # Add cost info to metadata
+        metadata["cost"] = {
+            "total_cost_usd": total_cost,
+            "total_tokens": total_tokens,
+            "cost_by_agent": cost_by_agent,
+        }
+
+        # Display cost summary
+        if total_cost > 0:
+            print(f"\n{'='*60}")
+            print("Cost Summary")
+            print(f"{'='*60}")
+            print(f"Total Cost: ${total_cost:.4f}")
+            print(f"Total Tokens: {total_tokens['total_tokens']:,} ({total_tokens['prompt_tokens']:,} input, {total_tokens['completion_tokens']:,} output)")
+            if cost_by_agent:
+                print("\nCost by Agent:")
+                for agent_name, agent_cost in cost_by_agent.items():
+                    print(f"  - {agent_name}: ${agent_cost:.4f}")
 
         return entry, metadata
 
